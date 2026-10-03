@@ -1824,3 +1824,229 @@ dialog .actions {
     font-size: 17px;
   }
 }
+
+/* User management, sharing the existing admin palette and controls. */
+.user-filters {
+  display: flex;
+  gap: 12px;
+  align-items: end;
+  margin: 28px 0;
+}
+.user-filters .search-field {
+  height: 48px;
+  min-width: 180px;
+}
+.user-filters .field {
+  margin: 0;
+  gap: 5px;
+}
+.field select {
+  background: var(--surface);
+  color: var(--ink);
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  padding: 12px;
+  min-height: 46px;
+}
+.users-table-wrap {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface);
+  padding-bottom: 6px;
+}
+.users-table {
+  table-layout: fixed;
+}
+.users-table th,
+.users-table td {
+  padding: 15px 10px;
+  overflow-wrap: anywhere;
+}
+.users-table th:first-child {
+  width: 24%;
+}
+.users-table th:nth-child(2) {
+  width: 24%;
+}
+.users-table th:last-child {
+  width: 64px;
+}
+.users-table tbody tr:hover {
+  background: var(--accent-soft);
+}
+.users-table tbody tr:last-child td {
+  border-bottom: 0;
+}
+.user-identity {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+.user-identity > span:last-child {
+  min-width: 0;
+}
+.user-id {
+  display: block;
+}
+.user-role.role-admin,
+.user-role.role-superadmin {
+  background: var(--ink);
+  color: var(--bg);
+}
+.user-role.role-author {
+  border: 1px solid var(--line);
+}
+.user-status {
+  gap: 6px;
+  white-space: nowrap;
+}
+.status-disabled {
+  background: var(--bg);
+  color: var(--muted);
+  border: 1px solid var(--line);
+}
+.user-row-menu {
+  position: relative;
+}
+.user-row-menu summary {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  border-radius: 6px;
+  cursor: pointer;
+  list-style: none;
+}
+.user-row-menu[open] {
+  z-index: 10;
+}
+.user-row-dropdown {
+  position: absolute;
+  right: 0;
+  top: 40px;
+  width: 230px;
+  padding: 8px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  box-shadow: 0 10px 30px #0002;
+}
+.user-row-dropdown a,
+.user-row-dropdown button {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 10px;
+  border-radius: 5px;
+  font-size: 12px;
+}
+.user-row-dropdown a:hover,
+.user-row-dropdown button:not(:disabled):hover {
+  background: var(--accent-soft);
+}
+.user-row-dropdown button:disabled {
+  cursor: not-allowed;
+}
+.user-row-dropdown p {
+  padding: 8px;
+  font-size: 11px;
+}
+.user-detail {
+  margin-top: 28px;
+  padding: 30px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface);
+}
+.user-detail-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 28px;
+  margin: 30px 0 0;
+}
+.user-detail dt {
+  font-size: 11px;
+  color: var(--muted);
+  margin-bottom: 7px;
+}
+.user-detail dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.user-detail h1 {
+  overflow-wrap: anywhere;
+}
+.user-detail > .section-heading {
+  align-items: flex-start;
+}
+@media (max-width: 1100px) {
+  .user-filters {
+    flex-wrap: wrap;
+  }
+  .user-filters .search-field {
+    flex-basis: 100%;
+  }
+}
+@media (max-width: 800px) {
+  .users-table,
+  .users-table tbody {
+    display: block;
+  }
+  .users-table thead {
+    display: none;
+  }
+  .users-table tr {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    padding: 18px;
+    gap: 15px;
+    border-bottom: 1px solid var(--line);
+    position: relative;
+  }
+  .users-table td {
+    display: block;
+    padding: 0;
+    border: 0;
+    min-width: 0 !important;
+  }
+  .users-table td::before {
+    content: attr(data-label);
+    display: block;
+    font-size: 10px;
+    color: var(--muted);
+    margin-bottom: 5px;
+  }
+  .users-table td:first-child,
+  .users-table td:nth-child(2) {
+    grid-column: 1/-1;
+    padding-right: 40px;
+  }
+  .users-table td:first-child::before,
+  .users-table td:last-child::before {
+    display: none;
+  }
+  .users-table td:last-child {
+    position: absolute;
+    right: 16px;
+    top: 16px;
+  }
+  .user-detail {
+    padding: 20px;
+  }
+  .user-detail-grid {
+    grid-template-columns: 1fr;
+  }
+  .user-filters .field {
+    flex: 1;
+    min-width: 90px;
+  }
+  .user-filters select {
+    width: 100%;
+    font-size: 12px;
+    padding: 10px 7px;
+  }
+}

@@ -47,7 +47,7 @@ export interface CurrentUser {
   email: string;
   role: Role;
 }
-export interface AuthResponse {
+export interface AuthResponseData {
   accessToken: string;
 }
 export interface CreatePostRequest {
@@ -58,3 +58,6 @@ export interface CreatePostRequest {
 
 export type UpdatePostRequest = CreatePostRequest;
 export type PostInput = CreatePostRequest;
+
+export type AuthResponse = AuthResponseData;
+export type RefreshResponse = AuthResponseData;

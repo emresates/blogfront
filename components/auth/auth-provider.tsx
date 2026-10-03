@@ -2,72 +2,73 @@
 import {
   createContext,
   useContext,
-  useState,
   useEffect,
-  useCallback,
+  useSyncExternalStore,
 } from "react";
 import { useRouter } from "next/navigation";
 import { authApi } from "@/lib/api/auth";
+import { useToast } from "@/components/ui/providers";
 import type { CurrentUser } from "@/types";
-const Context = createContext<{
+interface AuthContextValue {
+  accessToken: string | null;
   user: CurrentUser | null;
+  currentUser: CurrentUser | null;
   loading: boolean;
-  refresh: () => Promise<void>;
+  isAuthLoading: boolean;
+  isAuthenticated: boolean;
+  login: typeof authApi.login;
+  register: typeof authApi.register;
   logout: () => Promise<void>;
-}>({
-  user: null,
-  loading: true,
-  refresh: async () => {},
-  logout: async () => {},
-});
-export const useAuth = () => useContext(Context);
+  refreshAccessToken: typeof authApi.refreshAccessToken;
+  loadCurrentUser: typeof authApi.loadCurrentUser;
+}
+const Context = createContext<AuthContextValue | null>(null);
+export function useAuth() {
+  const value = useContext(Context);
+  if (!value) throw new Error("AuthProvider is required.");
+  return value;
+}
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const [user, setUser] = useState<CurrentUser | null>(null);
-  const [loading, setLoading] = useState(true);
+  const state = useSyncExternalStore(
+    authApi.subscribe,
+    authApi.getSnapshot,
+    authApi.getServerSnapshot,
+  );
   const router = useRouter();
-  const refresh = useCallback(async () => {
-    try {
-      setUser((await authApi.me()).data);
-    } catch (error) {
-      setUser(null);
-      throw error;
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+  const toast = useToast();
   useEffect(() => {
-    let active = true;
-    authApi
-      .me()
-      .then((res) => {
-        if (active) setUser(res.data);
-      })
-      .catch(() => {
-        if (active) setUser(null);
-      })
-      .finally(() => {
-        if (active) setLoading(false);
-      });
-    const expired = () => {
-      setUser(null);
-      router.push(
-        `/login?next=${encodeURIComponent(window.location.pathname + window.location.search)}`,
-      );
-    };
-    window.addEventListener("auth-expired", expired);
-    return () => {
-      active = false;
-      window.removeEventListener("auth-expired", expired);
-    };
-  }, [refresh, router]);
+    const unsubscribe = authApi.onSessionEnd((event) => {
+      toast(event.message);
+      if (window.location.pathname !== "/login")
+        router.replace(
+          `/login?next=${encodeURIComponent(window.location.pathname + window.location.search)}`,
+        );
+    });
+    void authApi.initialize(); // shared promise survives Strict Mode effect remounts
+    return unsubscribe;
+  }, [router, toast]);
   async function logout() {
-    await authApi.logout();
-    setUser(null);
-    router.push("/");
-    router.refresh();
+    try {
+      await authApi.logout();
+    } finally {
+      router.replace("/");
+      router.refresh();
+    }
   }
   return (
-    <Context.Provider value={{ user, loading, refresh, logout }}>
+    <Context.Provider
+      value={{
+        ...state,
+        currentUser: state.user,
+        isAuthLoading: state.loading,
+        isAuthenticated: !!state.accessToken && !!state.user,
+        login: authApi.login,
+        register: authApi.register,
+        logout,
+        refreshAccessToken: authApi.refreshAccessToken,
+        loadCurrentUser: authApi.loadCurrentUser,
+      }}
+    >
       {children}
     </Context.Provider>
   );

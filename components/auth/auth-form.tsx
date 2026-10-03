@@ -4,7 +4,6 @@ import { safeReturnPath } from "@/lib/api/proxy-policy";
 import { useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { ArrowUpRight, Code2 } from "lucide-react";
-import { authApi } from "@/lib/api/auth";
 import { errorMessage } from "@/lib/api/client";
 import { useAuth } from "./auth-provider";
 import { useToast } from "@/components/ui/providers";
@@ -12,29 +11,28 @@ import { Field } from "@/components/ui/primitives";
 export function AuthForm({ register = false }: { register?: boolean }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
-  const { refresh } = useAuth();
+  const { login, register: registerAccount, loading } = useAuth();
   const router = useRouter();
   const params = useSearchParams();
   const toast = useToast();
   async function submit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    if (busy) return;
+    if (busy || loading) return;
     setBusy(true);
     setError("");
     const form = new FormData(e.currentTarget);
     try {
       if (register)
-        await authApi.register(
+        await registerAccount(
           String(form.get("name")).trim(),
           String(form.get("email")).trim(),
           String(form.get("password")),
         );
       else
-        await authApi.login(
+        await login(
           String(form.get("email")).trim(),
           String(form.get("password")),
         );
-      await refresh();
       toast(register ? "Hesabın oluşturuldu. Hoş geldin!" : "Giriş başarılı.");
       const next = params.get("next");
       router.replace(safeReturnPath(next));
@@ -106,7 +104,7 @@ export function AuthForm({ register = false }: { register?: boolean }) {
               {error}
             </p>
           )}
-          <button className="button full" disabled={busy}>
+          <button className="button full" disabled={busy || loading}>
             {busy ? "Lütfen bekle…" : register ? "Hesap oluştur" : "Giriş yap"}
             <ArrowUpRight size={17} />
           </button>

@@ -41,21 +41,27 @@ npm start
 
 ## Mimari ve oturum
 
-- `lib/api/`: ortak API client, tipli endpoint modülleri ve endpoint/HTTP verb allowlist.
-- `types/`: API wrapper, pagination ve domain tipleri.
-- Public veri Server Components üzerinden doğrudan backend'den alınır.
-- Tarayıcı istekleri aynı origin'deki `/api/backend/...` Next.js BFF route'una gider. JWT, JavaScript'in okuyamadığı HttpOnly, SameSite=Lax cookie'de tutulur; production'da Secure kullanılır. Cookie oturum sürelidir; token geçerliliğinin kaynağı backend'dir.
-- Proxy JWT'yi backend'e Bearer olarak iletir; login/register sonucundaki token tarayıcı JavaScript'ine verilmez. Logout frontend oturumunu siler; backend'e uydurma logout endpoint'i çağrılmaz.
-- Mutasyonlarda Origin kontrolü uygulanır. Reverse proxy kurulumunda orijinal Host/Origin korunmalıdır. Production HTTPS gereklidir.
-- Register yalnızca `name`, `email`, `password`; post yalnızca `title`, `content`, `categoryIds`; yorum yalnızca `content` gönderir. Role, slug ve userId istemciden atanmaz.
-- 401 oturumu temizler ve korumalı işlemlerde login'e yönlendirir; 403 ve backend `message`/`errCode` API katmanından yönetilir.
-- Role-aware UI güvenlik sınırı değildir; nihai yetkilendirme backend'dedir.
-- Auth verisinde ve API isteklerinde `no-store` kullanılır.
+- `lib/api/client.ts`: mevcut endpoint modüllerinin ortak giriş noktası; public Server Component çağrıları kullanıcı state'i olmadan çalışır.
+- `lib/api/transport.ts`: tek fetch katmanı; base URL, PascalCase/camelCase adapter, hata tipleri, 15 saniye timeout ve `credentials: "include"`.
+- `lib/auth/session.ts`: tarayıcı belleğindeki access token/current user, başlangıç restore promise'i, refresh kuyruğu ve tek retry. Sunucuda kullanıcılar arasında paylaşılan auth state oluşturulmaz.
+- `lib/api/auth.ts` ve mevcut `AuthProvider`: login/register/logout, refreshAccessToken, loadCurrentUser, accessToken, currentUser, isAuthenticated ve isAuthLoading sağlar. Mevcut `user`/`loading` alanları korunur.
+- Tarayıcı artık `NEXT_PUBLIC_API_URL` adresine doğrudan istek gönderir. Backend refresh tokenı kendi origin'inde HttpOnly cookie olarak set eder; frontend tokenı okumaz, state/localStorage/sessionStorage'a yazmaz. Access token yalnızca memory'dedir.
+- Eski `/api/backend/...` access-token-cookie proxy'si kaldırıldı. Önceki sürümün `margin_session` cookie'si artık kullanılmaz; geçerli backend refresh cookie'si bulunmayan eski oturumlarda bir defalık yeniden giriş gerekir.
+- Login/register sonucu `data.accessToken` belleğe yazılır ve Bearer ile `/api/auth/me` alınır. Register yalnızca `name`, `email`, `password` gönderir.
+- Açılışta bodiesiz `POST /api/auth/refresh`, ardından `/me` çağrılır. Strict Mode effect tekrarları aynı initialization promise'ini paylaşır. Tamamlanana kadar route guard loading gösterir; normal restore başarısızlığı guest state ile sonuçlanır.
+- Normal request 401 alınca bir refresh promise'i paylaşılır. Yeni Bearer token ile orijinal method/body bir kez tekrar gönderilir. Geç gelen eski-token 401, zaten alınmış yeni tokenı kullanır. Retry 401 veya refresh hatası state'i temizler ve aktif işlemde login'e yönlendirir.
+- Login/register/refresh/logout 401 yanıtları refresh tetiklemez. 403 refresh tetiklemez ve backend mesajı gösterilir. `userDisabled` state'i temizler, login'e yönlendirir ve açıklayıcı toast gösterir.
+- Logout gerçek backend `/api/auth/logout` endpoint'ini çağırır; yanıt başarısız olsa bile memory temizlenir ve ana sayfaya dönülür. Devam eden cookie rotation tamamlandıktan sonra revoke isteği yapılır; geç gelen refresh/login cevabı memory oturumunu yeniden açamaz. Ağ hatasında backend revoke işlemi doğrulanamaz; hata toast ile görünür olur.
+- Auth generation kontrolü eski isteğin yeni login'i silmesini önler. Tek refresh garantisi aynı tarayıcı uygulama instance'ındaki istekler içindir; ayrı sekmeler arasında koordinasyon yapılmaz.
+- Role-aware UI güvenlik sınırı değildir; nihai yetkilendirme backend'dedir. Bütün API isteklerinde `no-store` kullanılır.
 - Article çağrısı `React.cache` ile metadata/page arasında tekilleştirilir. Detay linklerinde prefetch kapalıdır; beğeni/yorum mutasyonları article endpoint'ini yeniden çağırmaz.
-- Post içeriği `JSONContent` olarak tutulur. Admin/Author ortak `RichTextEditor` bileşeninde `editor.getJSON()` çıktısı state üzerinden create/update requestinin `content` alanına object olarak verilir; HTML veya JSON string gönderilmez.
-- `RichTextRenderer`, aynı StarterKit şemasıyla `editable: false` ve `immediatelyRender: false` kullanır. Geçersiz/boş belgeler için fallback bulunur; HTML enjeksiyonu yapılmaz ve link protokolleri filtrelenir.
-- `lib/utils/richText.ts` doğrulama, güvenli linkler ve recursive plain-text extraction içerir. Kart önizlemesi, okuma süresi ve metadata bu metni kullanır.
-- Editör başlıklar, kalın/italik/underline/strike, listeler, alıntı, kod bloğu, link ve undo/redo destekler. Başlık en az 3 karakter, içerik dolu ve en az bir kategori zorunludur. Arama başlıklar için mevcut backend query parametresini kullanır.
+- Post `JSONContent` olarak tutulur. Ortak `RichTextEditor`, `editor.getJSON()` çıktısını create/update requestine object olarak verir. `RichTextRenderer` salt okunur StarterKit ile render eder; bozuk içerik fallback'i ve güvenli link filtresi korunur.
+
+### Cross-origin cookie gereksinimleri
+
+Backend CORS, gerçek frontend origin'ini (geliştirmede örneğin `http://localhost:3000`) açıkça döndürmeli: `Access-Control-Allow-Origin` için `*` kullanılamaz, `Access-Control-Allow-Credentials: true` gereklidir. Preflight, Authorization/Content-Type header'larını ve GET/POST/PUT/PATCH/DELETE method'larını kabul etmelidir. Farklı site cookie'si backend'de `HttpOnly; Secure; SameSite=None` ve auth endpoint'lerini kapsayan Path ile set edilmelidir. Tarayıcının üçüncü taraf cookie politikası da cookie'yi engellememelidir. Cookie header'larını backend yönetir; frontend bu ayarları taklit etmez.
+
+2026-10-03 refresh geçişi kontrolünde verilen Railway adresindeki `POST /api/auth/refresh` 404 döndürdü. Yanıtta `Access-Control-Allow-Origin: *` vardı ve `Access-Control-Allow-Credentials` yoktu. Endpoint deployment'ı ve credential destekli CORS düzelmeden tarayıcıda başarılı login/restore/rotation/logout akışı doğrulanamaz.
 
 ## Backend sözleşmesi ve bilinçli sınırlar
 
@@ -64,19 +70,26 @@ npm start
 - `isLiked` varsayılmaz. Beğeni durumu ilk yüklemede bilinmez; kullanıcı beğenebilir veya önceki beğenisini kaldırabilir. `postAlreadyLiked` yanıtı bilinen duruma geçirir. Bileşen ileride opsiyonel `initialLiked` alabilir.
 - Güvenilir toplam yazı sayısı pagination'dan, kategori sayısı kategori listesinden gelir. Tüm site görüntülenme/beğeni/yorum toplamları istatistik endpoint'i olmadan gösterilmez.
 - Global yorum endpoint'i yoktur; yönetici bir yazıyı seçerek gerçek yorum endpoint'leriyle moderasyon yapar.
-- User listesi/role değiştirme endpoint'i yoktur; kullanıcı CRUD'u eklenmemiştir.
+- `/admin/users` ve `/admin/users/[id]`: gerçek kullanıcı listesi/detayı, rol ve hesap durumu yönetimi. `lib/api/users.ts` GET `/api/users`, GET `/api/users/{id}`, PATCH `/api/users/{id}/role` ve PATCH `/api/users/{id}/status` kullanır. JWT merkezi memory store'dan Bearer olarak iletilir.
+- Kullanıcı filtreleri URL'ye yazılır; `status=active/disabled` API'ye `isActive=true/false` olarak çevrilir. Varsayılan sayfa boyutu 20, üst sınır 100.
+- Admin yalnızca User/Author hesaplarını yönetebilir ve bu rolleri atayabilir. SuperAdmin tüm rolleri yönetebilir. Kendi rolünü/durumunu değiştirme aksiyonları kapalıdır; backend son yetki kaynağıdır. Her değişiklik için onay alınır; 403 mesajı görünür, 401 mevcut oturum yönlendirmesini kullanır.
+- Başarılı mutasyonlar yerel satırı günceller ve listeyi arka planda yeniler; filtre dışına çıkan kayıtlar ve boşalan son sayfa yeniden hesaplanır.
 - GET-by-id ve yazar filtresi garanti edilmediği için edit yüklemesi ve Author listesi mevcut paginated post listesinden bulunur. Author listesi önce tüm sayfaları okuyup sahipliğe göre filtreler; büyük veri için backend'de authorId filtresi/GET-by-id gerekir. Eksik toplamları doğruymuş gibi göstermemek için 1000 sayfa sınırında açıklayıcı hata verilir.
 - Comment count detay başlığında ilk server snapshot'ıdır; yorum bölümü mutasyonlardan sonra kendi listesini/sayısını yeniler. Bu yaklaşım tekrar article GET ile view count artmasını önler.
 
 ## Doğrulama
 
-- Strict TypeScript production build ve ESLint.
-- `npm test`: rol izinleri, proxy endpoint/verb kısıtlaması, path traversal, dış adrese dönüş yönlendirmesi, rich-text extraction, boş/bozuk belgeler, güvenli linkler ve gerçek StarterKit şemasıyla JSON round-trip kontrolleri.
+- Strict TypeScript production build ve ESLint başarılı.
+- Refresh geçişinde 21 test geçti. Gerçek tarayıcı açılışında bir adet `/api/auth/refresh` isteği, kullanılabilir guest login formu ve auth/token storage anahtarı oluşturulmadığı doğrulandı. Başarılı cookie rotation senaryoları canlı backend erişim sorunu nedeniyle yalnızca izole oturum testlerinde doğrulanabildi.
+- `npm test`: auth initialization, login/register, 401 tek retry, eşzamanlı/geç gelen 401, 403, disabled kullanıcı, revoked refresh, logout hatası ve logout/refresh yarışları; ayrıca mevcut rol, URL query ve rich-text kontrolleri. Auth testleri izole transport yanıtlarıyla çalışır; üretim uygulamasında fake/mock auth veya API yoktur.
 - TipTap editörü izole geçici test ekranında mevcut JSON yükleme, bold mark çıktısı ve undo/redo ile tarayıcıda doğrulandı; bu ekran production projesinden kaldırıldı.
 - Gerçek API public listeleri ve boş durumlar kontrol edildi.
 - Tarayıcıda açık/koyu tema, 390 px mobil taşma kontrolü, mobil menü, URL araması (sayfa reseti dahil) ve oturumsuz `/admin` → `/login?next=...` yönlendirmesi doğrulandı.
-- Proxy entegrasyonunda public posts yanıtı 200, geçersiz Origin 403, GET ile logout isteği 404 döndü.
 - Gerçek backend geçersiz giriş yanıtı 401 olarak doğrulandı; PascalCase response normalizasyonu için regresyon testi eklendi.
 - Yetkili test hesabı sağlanmadığı için başarılı login/register, içerik oluşturma/düzenleme/silme, beğeni ve yorum mutasyonlarının uçtan uca doğrulaması ayrıca yapılmalıdır. Test amacıyla production'a örnek içerik veya hesap eklenmedi.
+
+2026-10-03 canlı kontrolde verilen Railway adresinde `/api/posts` 200, `/api/users?page=1&pageSize=20` ve `/api/users/1` ise 404 döndürdü. Yeni kullanıcı endpoint'lerinin deployment durumu doğrulanmalıdır; bu koşulda yetkili kullanıcı yönetimi uçtan uca doğrulanamadı.
+
+User management için rol matrisi, self-management engeli ve status/query eşlemesi regresyon testleri korunur. Yetkili test hesabı olmadan gerçek kullanıcı rolü veya hesap durumu değiştirilmedi.
 
 Açık/koyu tema kalıcı tercihle çalışır. Mobil navigasyon, klavye focus durumları, native modal focus yönetimi, loading/empty/error ekranları ve toast bildirimleri bulunur.

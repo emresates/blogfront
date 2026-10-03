@@ -2,6 +2,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
+  Users,
   LayoutDashboard,
   FileText,
   Folder,
@@ -29,6 +30,7 @@ export function AdminShell({
       ? [
           { href: base + "/categories", label: "Kategoriler", icon: Folder },
           { href: base + "/comments", label: "Yorumlar", icon: MessageCircle },
+          { href: base + "/users", label: "Users", icon: Users },
         ]
       : []),
   ];
@@ -48,7 +50,12 @@ export function AdminShell({
               {items.map(({ href, label, icon: Icon }) => (
                 <Link
                   key={href}
-                  className={path === href ? "selected" : ""}
+                  className={
+                    path === href ||
+                    (href !== base && path.startsWith(href + "/"))
+                      ? "selected"
+                      : ""
+                  }
                   href={href}
                 >
                   <Icon size={18} />
@@ -66,4 +73,3 @@ export function AdminShell({
     </div>
   );
 }
-// TODO: Enable when backend role-management endpoints are available.

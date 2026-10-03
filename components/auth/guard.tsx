@@ -17,7 +17,9 @@ export function Guard({
   const path = usePathname();
   useEffect(() => {
     if (!loading && !user)
-      router.replace(`/login?next=${encodeURIComponent(path)}`);
+      router.replace(
+        `/login?next=${encodeURIComponent(path + window.location.search)}`,
+      );
   }, [loading, user, router, path]);
   if (loading || !user) return <LoadingSkeleton />;
   if (roles && !roles.includes(user.role))
