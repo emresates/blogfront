@@ -2050,3 +2050,71 @@ dialog .actions {
     padding: 10px 7px;
   }
 }
+
+.comment-tree,
+.comment-replies {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.comment-tree .comment {
+  margin: 0;
+}
+.comment-replies {
+  margin-left: 22px;
+  padding-left: 16px;
+  border-left: 1px solid var(--line);
+}
+.comment-replies.indent-capped {
+  margin-left: 0;
+  padding-left: 0;
+  border-left: 0;
+}
+.is-reply > .comment > .avatar {
+  width: 30px;
+  height: 30px;
+  font-size: 10px;
+}
+.comment-actions {
+  margin-top: 12px;
+  gap: 18px;
+}
+.inline-comment-form {
+  margin-top: 18px;
+  padding: 18px;
+  background: var(--accent-soft);
+  border: 1px solid var(--line);
+  border-radius: 9px;
+}
+.inline-comment-form .field {
+  margin-bottom: 12px;
+}
+.comment-body {
+  overflow-wrap: anywhere;
+}
+.comment-thread {
+  min-width: 0;
+}
+@media (max-width: 600px) {
+  .comment-replies {
+    margin-left: 8px;
+    padding-left: 8px;
+  }
+  .comment-tree .comment {
+    gap: 10px;
+  }
+  .inline-comment-form {
+    padding: 12px;
+  }
+  .comment-actions {
+    gap: 12px;
+  }
+  .comment-replies .avatar {
+    width: 26px;
+    height: 26px;
+  }
+  .comment-replies.indent-capped {
+    padding-left: 0;
+    margin-left: 0;
+  }
+}

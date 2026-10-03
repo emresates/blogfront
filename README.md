@@ -93,3 +93,13 @@ Backend CORS, gerçek frontend origin'ini (geliştirmede örneğin `http://local
 User management için rol matrisi, self-management engeli ve status/query eşlemesi regresyon testleri korunur. Yetkili test hesabı olmadan gerçek kullanıcı rolü veya hesap durumu değiştirilmedi.
 
 Açık/koyu tema kalıcı tercihle çalışır. Mobil navigasyon, klavye focus durumları, native modal focus yönetimi, loading/empty/error ekranları ve toast bildirimleri bulunur.
+
+## Yorum yanıtları
+
+`Comment` tipi recursive `replies` ve nullable `parentCommentId` içerir. `lib/api/comments.ts` içindeki `createCommentReply(commentId, content)`, mevcut JWT/refresh destekli client üzerinden `POST /api/comments/{commentId}/replies` çağırır; body yalnızca `{ content }` içerir. Yanıtlar mevcut PUT/DELETE comment endpoint'lerini kullanır.
+
+`CommentItem` bütün seviyeleri recursive render eder; girinti üç seviyede sabitlenir ve mobilde azaltılır. `ReplyForm` yanıt ve düzenleme için paylaşılır; loading, double-submit kilidi, iptal ve inline hata gösterimi içerir. Guest kullanıcıya textarea yerine login bağlantısı gösterilir. Sahip, Admin ve SuperAdmin düzenleme/silme aksiyonlarını görür; backend son yetki kaynağıdır.
+
+Mutasyonlardan sonra yalnızca yorum listesi yeniden alınır; article endpoint'i ve view count etkilenmez. Başarılı silme alt ağacı yerel olarak da kaldırır, ardından backend'deki cascade sonucu refetch edilir. Eksik/bozuk replies alanı adapter'da boş diziye dönüşür. Bölüm sayacı yanıtlar dahil bütün node'ları sayar.
+
+Reply güncellemesinde lint, 25 test ve production build başarılı. Canlı `/api/posts/3/comments` 200 ve boş liste döndürdü. Nested tree, hatalı replies, alt ağaç silme ve izinler birim testleriyle doğrulandı. Yetkili hesap olmadan canlı create/reply/edit/delete veya admin moderasyon mutasyonu yapılmadı.

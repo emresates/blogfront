@@ -36,10 +36,12 @@ export interface Comment {
   id: number;
   content: string;
   createdAt: string;
-  updatedAt?: string;
-  userId: string;
+  updatedAt?: string | null;
+  userId: number;
   userName: string;
   postId: number;
+  parentCommentId?: number | null;
+  replies: Comment[];
 }
 export interface CurrentUser {
   userId: string;

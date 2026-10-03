@@ -1,71 +1,100 @@
 "use client";
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import Link from "next/link";
 import type { Comment } from "@/types";
-import { commentsApi } from "@/lib/api/comments";
+import { commentsApi, createCommentReply } from "@/lib/api/comments";
 import { errorMessage } from "@/lib/api/client";
 import { useAuth } from "@/components/auth/auth-provider";
 import { useToast } from "@/components/ui/providers";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Textarea } from "@/components/ui/primitives";
-import { isAdmin } from "@/lib/auth/roles";
-import { date, initials } from "@/lib/utils";
+import { CommentItem } from "./CommentItem";
+import { countComments, removeComment } from "@/lib/utils/comments";
 export function CommentSection({ postId }: { postId: number }) {
-  const { user } = useAuth();
+  const { user, loading: authLoading } = useAuth();
   const toast = useToast();
   const [comments, setComments] = useState<Comment[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [content, setContent] = useState("");
-  const [editing, setEditing] = useState<number | null>(null);
-  const [draft, setDraft] = useState("");
   const [deleting, setDeleting] = useState<number | null>(null);
-  const load = useCallback(async () => {
-    setError("");
-    try {
-      setComments((await commentsApi.list(postId)).data);
-    } catch (e) {
-      setError(errorMessage(e));
-    } finally {
-      setLoading(false);
-    }
+  const lock = useRef(false);
+  const requestId = useRef(0);
+  const load = useCallback(() => {
+    const request = ++requestId.current;
+    return commentsApi
+      .list(postId)
+      .then((response) => {
+        if (request === requestId.current) {
+          setComments(response.data);
+          setError("");
+        }
+      })
+      .catch((e) => {
+        if (request === requestId.current) setError(errorMessage(e));
+      })
+      .finally(() => {
+        if (request === requestId.current) setLoading(false);
+      });
   }, [postId]);
   useEffect(() => {
-    // Initial remote-data synchronization; subsequent mutations reuse this loader.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
+    const tracker = requestId;
     void load();
+    return () => {
+      tracker.current++;
+    };
   }, [load]);
-  async function save(edit = false) {
-    if (busy) return;
-    const text = (edit ? draft : content).trim();
-    if (!text) return;
+  async function mutate(
+    action: () => Promise<unknown>,
+    message: string,
+    after?: () => void,
+  ) {
+    if (lock.current)
+      throw new Error("Lütfen devam eden işlemin bitmesini bekle.");
+    if (!user) throw new Error("Bu işlem için giriş yapmalısın.");
+    lock.current = true;
     setBusy(true);
     try {
-      if (edit && editing !== null) await commentsApi.update(editing, text);
-      else await commentsApi.create(postId, text);
-      setContent("");
-      setEditing(null);
+      await action();
+      after?.();
+      toast(message);
       await load();
-      toast(edit ? "Yorum güncellendi." : "Yorum başarıyla eklendi.");
     } catch (e) {
       toast(errorMessage(e));
+      throw e;
     } finally {
+      lock.current = false;
       setBusy(false);
     }
   }
-  async function remove() {
-    if (deleting === null || busy) return;
-    setBusy(true);
+  async function create(e: React.FormEvent) {
+    e.preventDefault();
+    if (!content.trim() || lock.current) return;
     try {
-      await commentsApi.remove(deleting);
-      setComments((c) => c.filter((x) => x.id !== deleting));
-      setDeleting(null);
-      toast("Yorum silindi.");
-    } catch (e) {
-      toast(errorMessage(e));
-    } finally {
-      setBusy(false);
+      await mutate(
+        () => commentsApi.create(postId, content.trim()),
+        "Yorum başarıyla eklendi.",
+        () => setContent(""),
+      );
+    } catch {
+      /* error is shown by mutate */
+    }
+  }
+  async function remove() {
+    if (deleting === null || lock.current) return;
+    const id = deleting;
+    try {
+      await mutate(
+        () => commentsApi.remove(id),
+        "Yorum silindi.",
+        () => {
+          setComments((tree) => removeComment(tree, id));
+          setDeleting(null);
+        },
+      );
+    } catch {
+      /* keep confirmation open on failure */
     }
   }
   return (
@@ -74,16 +103,14 @@ export function CommentSection({ postId }: { postId: number }) {
         <h2>
           Sohbete katıl<span className="brand-dot">.</span>
         </h2>
-        <span className="badge">{comments.length} yorum</span>
+        <span className="badge">{countComments(comments)} yorum</span>
       </div>
-      {user ? (
-        <form
-          className="comment-form"
-          onSubmit={(e) => {
-            e.preventDefault();
-            void save();
-          }}
-        >
+      {authLoading ? (
+        <p className="muted small" role="status">
+          Oturum kontrol ediliyor…
+        </p>
+      ) : user ? (
+        <form className="comment-form" onSubmit={create}>
           <Textarea
             label="Sen ne düşünüyorsun?"
             placeholder="Bir fikir, bir soru, yeni bir bakış açısı…"
@@ -92,6 +119,7 @@ export function CommentSection({ postId }: { postId: number }) {
             required
             maxLength={10000}
             rows={4}
+            disabled={busy}
           />
           <button className="button" disabled={busy || !content.trim()}>
             {busy ? "İşleniyor…" : "Yorum gönder"}
@@ -103,90 +131,48 @@ export function CommentSection({ postId }: { postId: number }) {
           <Link href="/register">hesap oluştur</Link>.
         </div>
       )}
+      {error && (
+        <div role="alert" className="form-error">
+          {error}{" "}
+          <button
+            className="text-link"
+            disabled={busy}
+            onClick={() => void load()}
+          >
+            Tekrar dene
+          </button>
+        </div>
+      )}
       {loading ? (
         <p aria-busy="true">Yorumlar yükleniyor…</p>
-      ) : error ? (
-        <div role="alert" className="form-error">
-          {error}
-          <button onClick={() => void load()}>Tekrar dene</button>
-        </div>
       ) : comments.length === 0 ? (
-        <p className="empty-comment">
-          İlk yorumu sen yaz. Güzel bir sohbet tek bir cümleyle başlar.
-        </p>
+        !error && (
+          <p className="empty-comment">
+            İlk yorumu sen yaz. Güzel bir sohbet tek bir cümleyle başlar.
+          </p>
+        )
       ) : (
-        comments.map((c) => (
-          <article className="comment" key={c.id}>
-            <span className="avatar">{initials(c.userName || "U")}</span>
-            <div className="comment-body">
-              <div className="comment-heading">
-                <strong>{c.userName}</strong>
-                <time className="muted small">{date(c.createdAt)}</time>
-              </div>
-              {editing === c.id ? (
-                <form
-                  onSubmit={(e) => {
-                    e.preventDefault();
-                    void save(true);
-                  }}
-                >
-                  <Textarea
-                    label="Yorumu düzenle"
-                    value={draft}
-                    onChange={(e) => setDraft(e.target.value)}
-                    required
-                    rows={3}
-                  />
-                  <div className="actions">
-                    <button
-                      disabled={busy || !draft.trim()}
-                      className="button compact"
-                    >
-                      Kaydet
-                    </button>
-                    <button
-                      type="button"
-                      disabled={busy}
-                      onClick={() => setEditing(null)}
-                      className="text-link"
-                    >
-                      Vazgeç
-                    </button>
-                  </div>
-                </form>
-              ) : (
-                <p className="plain-text">{c.content}</p>
-              )}
-              {user &&
-                (String(user.userId) === String(c.userId) ||
-                  isAdmin(user.role)) && (
-                  <div className="actions small">
-                    <button
-                      disabled={busy}
-                      className="text-link"
-                      onClick={() => {
-                        setEditing(c.id);
-                        setDraft(c.content);
-                      }}
-                    >
-                      Düzenle
-                    </button>
-                    <button
-                      disabled={busy}
-                      className="text-link danger-text"
-                      onClick={() => setDeleting(c.id)}
-                    >
-                      Sil
-                    </button>
-                  </div>
-                )}
-            </div>
-          </article>
-        ))
+        <ul className="comment-tree">
+          {comments.map((comment) => (
+            <CommentItem
+              key={comment.id}
+              comment={comment}
+              currentUser={user}
+              busy={busy}
+              onReply={(id, text) =>
+                mutate(() => createCommentReply(id, text), "Yanıt eklendi.")
+              }
+              onUpdated={(id, text) =>
+                mutate(() => commentsApi.update(id, text), "Yorum güncellendi.")
+              }
+              onDeleted={setDeleting}
+            />
+          ))}
+        </ul>
       )}
       <ConfirmDialog
         open={deleting !== null}
-        title="Yorum silinsin mi?"
+        title="Yorum ve varsa yanıtları silinsin mi?"
         busy={busy}
         onCancel={() => setDeleting(null)}
         onConfirm={() => void remove()}
